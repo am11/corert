@@ -1,3 +1,13 @@
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="..\dir.targets" />
+
+  <Target Name="DetectLibcFlavor" BeforeTargets="Build" Condition="'$(OSGroup)' == 'Linux'">
+    <Exec Command="ldd --version" ConsoleToMSBuild="true" ContinueOnError="true" StandardOutputImportance="low" StandardErrorImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="LddOutput" />
+    </Exec>
+
+    <PackageTargetRuntime Condition="$([System.Text.RegularExpressions.Regex]::IsMatch(`$(LddOutput)`, `musl`))">
+      linux-musl-x64
+    </PackageTargetRuntime>
+  </Target>
 </Project>
