@@ -26,6 +26,29 @@ namespace ILCompiler.DependencyAnalysis.X86
             Builder.EmitByte((byte)immediate);
         }
 
+        public void EmitLEAQ(Register reg, ISymbolNode symbol, int delta = 0)
+        {
+            AddrMode rexAddrMode = new AddrMode(Register.EAX, null, 0, 0, AddrModeSize.Int32);
+            Builder.EmitByte(0x8D);
+            Builder.EmitByte((byte)(0x05 | (((int)reg) & 0x07) << 3));
+            Builder.EmitReloc(symbol, RelocType.IMAGE_REL_BASED_REL32, delta);
+        }
+
+        public void EmitLEA(Register reg, ref AddrMode addrMode)
+        {
+            Debug.Assert(addrMode.Size != AddrModeSize.Int8 &&
+                addrMode.Size != AddrModeSize.Int16);
+            EmitIndirInstruction((byte)0x8D, reg, ref addrMode);
+        }
+
+        public void EmitCMP(ref AddrMode addrMode, sbyte immediate)
+        {
+            if (addrMode.Size == AddrModeSize.Int16)
+                Builder.EmitByte(0x66);
+            EmitIndirInstruction((byte)((addrMode.Size != AddrModeSize.Int8) ? 0x83 : 0x80), 0x7, ref addrMode);
+            Builder.EmitByte((byte)immediate);
+        }
+
         public void EmitJMP(ISymbolNode symbol)
         {
             if (symbol.RepresentsIndirectionCell)
@@ -76,6 +99,19 @@ namespace ILCompiler.DependencyAnalysis.X86
             }
         }
 
+        // Assembly stub creation api. TBD, actually make this general purpose
+        public void EmitMOV(Register regDst, ref AddrMode memory)
+        {
+            EmitIndirInstructionSize(0x8a, regDst, ref memory);
+        }
+
+        public void EmitMOV(Register regDst, Register regSrc)
+        {
+            AddrMode rexAddrMode = new AddrMode(regSrc, null, 0, 0, AddrModeSize.Int32);
+            Builder.EmitByte(0x8B);
+            Builder.EmitByte((byte)(0xC0 | (((int)regDst & 0x07) << 3) | (((int)regSrc & 0x07))));
+        }
+
         public void EmitMOV(Register register, ISymbolNode node)
         {
             if (node.RepresentsIndirectionCell)
@@ -95,6 +131,21 @@ namespace ILCompiler.DependencyAnalysis.X86
         public void EmitINT3()
         {
             Builder.EmitByte(0xCC);
+        }
+
+        public void EmitRET()
+        {
+            Builder.EmitByte(0xC3);
+        }
+
+        public void EmitRETIfEqual()
+        {
+            // jne @+1
+            Builder.EmitByte(0x75);
+            Builder.EmitByte(0x01);
+
+            // ret
+            Builder.EmitByte(0xC3);
         }
 
         private bool InSignedByteRange(int i)
@@ -207,6 +258,16 @@ namespace ILCompiler.DependencyAnalysis.X86
             Builder.EmitByte((byte)(opcode >> 8));
         }      
 
+        private void EmitIndirInstruction(int opcode, Register dstReg, ref AddrMode addrMode)
+        {
+            if ((opcode >> 8) != 0)
+            {
+                EmitExtendedOpcode(opcode);
+            }
+            Builder.EmitByte((byte)opcode);
+            EmitModRM((byte)((int)dstReg & 0x07), ref addrMode);
+        }
+
         private void EmitIndirInstruction(int opcode, byte subOpcode, ref AddrMode addrMode)
         {
             if ((opcode >> 8) != 0)
@@ -215,6 +276,18 @@ namespace ILCompiler.DependencyAnalysis.X86
             }
             Builder.EmitByte((byte)opcode);
             EmitModRM(subOpcode, ref addrMode);
+        }
+
+        private void EmitIndirInstructionSize(int opcode, Register dstReg, ref AddrMode addrMode)
+        {
+            //# ifndef _TARGET_AMD64_
+            // assert that ESP, EBP, ESI, EDI are not accessed as bytes in 32-bit mode
+            //            Debug.Assert(!(addrMode.Size == AddrModeSize.Int8 && dstReg > Register.RBX));
+            //#endif
+            Debug.Assert(addrMode.Size != 0);
+            if (addrMode.Size == AddrModeSize.Int16)
+                Builder.EmitByte(0x66);
+            EmitIndirInstruction(opcode + ((addrMode.Size != AddrModeSize.Int8) ? 1 : 0), dstReg, ref addrMode);
         }
     }
 }

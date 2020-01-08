@@ -26,9 +26,15 @@ namespace ILCompiler.DependencyAnalysis.X86
                     Arg1 = Register.EDX;
                     Result = Register.EAX;
                     break;
-                    
+
+                case TargetOS.Linux:
+                    Arg0 = Register.ECX;
+                    Arg1 = Register.EDX;
+                    Result = Register.EAX;
+                    break;
+
                 default:
-                    throw new NotImplementedException();
+                    throw new NotImplementedException("dude! $os");
             }
         }
     }
